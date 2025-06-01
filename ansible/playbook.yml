@@ -1,0 +1,244 @@
+- name: basic packages
+  hosts: 
+    - all
+  become: yes
+
+  tasks:
+    - name: update packages
+      dnf:
+        name: "*"
+        state: latest
+
+    - name: Install Scientific Support group with optional packages
+      ansible.builtin.dnf:
+        name: 
+          - "@Server"
+          - "@Scientific Support"
+          - "@Development Tools"
+        state: present
+
+    - name: install more packages
+      dnf:
+        name: 
+          - gcc-gfortran
+          - ncdu
+          - btop
+        state: present
+
+- name: create nfs share
+  hosts: server
+  become: yes
+
+  tasks:
+    - name: install nfs server
+      dnf:
+        name: nfs-utils
+        state: present
+
+    - name: start nfs service
+      service:
+        name: "{{ item }}"
+        enabled: yes
+        state: started
+      loop:
+        - nfs-server
+        - rpcbind
+
+    - name: firewall
+      ansible.posix.firewalld:
+        service: "{{ item }}"
+        permanent: true
+        state: enabled
+        immediate: true
+      loop:
+        - nfs
+        - nfs3
+        - mountd
+        - rpc-bind
+
+    - name: copy exports config
+      copy:
+        src: ./exports
+        dest: /etc/exports
+
+    - name: exportfs
+      command: exportfs -a -r
+
+- name: mount nfs share
+  hosts: clients
+  become: yes
+
+  tasks:
+    - name: install nfs client
+      dnf:
+        name: nfs-utils
+        state: present
+
+    - name: Enable SELinux boolean for NFS home directories
+      ansible.builtin.seboolean:
+        name: use_nfs_home_dirs
+        state: true
+        persistent: yes
+
+    - name: Mount the NFS share
+      ansible.builtin.mount:
+        path: "/home"
+        src: "192.168.1.101:/home"
+        fstype: nfs
+        opts: defaults
+        state: mounted
+
+- name: setup user
+  hosts: 
+    - all
+  become: yes
+
+  tasks:
+    - name: create user
+      user:
+        name: charl
+        password: $y$j9T$NrhbtD9uT1/nlAH4WGRmW.$UB3gSS.ZxJHk0QMPqHWk0brKXgKkt4Laidgpt9SURq6
+        state: present
+        shell: /bin/bash
+
+    - name: Add authorized SSH key'
+      ansible.builtin.authorized_key:
+        user: charl
+        state: present
+        key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+
+    - name: Add CVMFS CMS source line to charl's .bashrc
+      ansible.builtin.lineinfile:
+        path: /home/charl/.bashrc
+        line: 'source /cvmfs/cms.cern.ch/cmsset_default.sh'
+        state: present
+        insertafter: EOF
+
+# - name: htcondor
+#   hosts: exec01
+#   become: yes
+
+#   tasks:
+#     - name: Enable CRB repo
+#       community.general.dnf_config_manager:
+#         name: crb
+#         state: enabled
+
+#     - name: install htcondor release
+#       ansible.builtin.dnf:
+#         name: https://research.cs.wisc.edu/htcondor/repo/24.x/htcondor-release-current.el9.noarch.rpm
+#         state: present
+#         disable_gpg_check: true
+
+#     - name: install htcondor
+#       ansible.builtin.dnf:
+#         name: condor
+#         state: present
+  
+#     - name: start condor service
+#       ansible.builtin.service:
+#         name: condor
+#         state: started
+#         enabled: true
+
+    # - name: Remove HTCondor config file if it exists
+    #   ansible.builtin.file:
+    #     path: /etc/condor/config.d/00-htcondor-9.0.config
+    #     state: absent
+
+    # - name: Create SEC_PASSWORD_DIRECTORY with correct permissions
+    #   ansible.builtin.command: "mkdir -p $(condor_config_val SEC_PASSWORD_DIRECTORY)"
+    #   args:
+    #     creates: "{{ lookup('pipe', 'condor_config_val SEC_PASSWORD_DIRECTORY') }}"
+    #   environment:
+    #     UMASK: "0077"
+
+    # - name: Add NONE credential using condor_store_cred
+    #   ansible.builtin.shell: |
+    #     echo -n "NONE" | condor_store_cred add -c -i -
+    #   args:
+    #     executable: /bin/bash
+
+    # - name: Create SEC_TOKEN_SYSTEM_DIRECTORY with correct permissions
+    #   ansible.builtin.command: "mkdir -p $(condor_config_val SEC_TOKEN_SYSTEM_DIRECTORY)"
+    #   args:
+    #     creates: "{{ lookup('pipe', 'condor_config_val SEC_TOKEN_SYSTEM_DIRECTORY') }}"
+    #   environment:
+    #     UMASK: "0077"
+
+    # - name: Create condor token for condor@cm
+    #   ansible.builtin.shell: |
+    #     condor_token_create -identity condor@cm > /etc/condor/tokens.d/condor@cm
+    #   args:
+    #     executable: /bin/bash
+    #   environment:
+    #     UMASK: "0077"
+    #   creates: /etc/condor/tokens.d/condor@cm
+
+- name: cvmfs
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: install cvmfs release
+      dnf:
+        name: https://cvmrepo.s3.cern.ch/cvmrepo/yum/cvmfs-release-latest.noarch.rpm
+        state: present
+        disable_gpg_check: true
+
+    - name: install cvmfs
+      dnf:
+        name: cvmfs
+        state: present
+
+    - name: cvmfs config
+      command: cvmfs_config setup
+
+    - name: uncomment line in /etc/auto.master
+      ansible.builtin.lineinfile:
+        path: /etc/auto.master
+        regexp: '^#\+dir:/etc/auto\.master\.d'
+        line: '+dir:/etc/auto.master.d'
+        state: present
+    
+    - name: restart autofs
+      service:
+        name: autofs
+        state: restarted
+        enabled: true
+
+    - name: Add CVMFS config file for a repository (e.g. atlas.cern.ch)
+      copy:
+        dest: /etc/cvmfs/default.local
+        content: |
+          CVMFS_REPOSITORIES=cms.cern.ch,grid.cern.ch
+          CVMFS_CLIENT_PROFILE=single
+          CVMFS_CACHE_BASE=/srv/cvmfs
+          CVMFS_QUOTA_LIMIT=10000
+
+    - name: probe
+      command: cvmfs_config probe
+
+- name: setup htcondor central manager
+  hosts: server
+  become: yes
+
+  tasks:
+    - name: setup htcondor cm
+      shell: "curl -fsSL https://get.htcondor.org | GET_HTCONDOR_PASSWORD=password /bin/bash -s -- --no-dry-run --central-manager 192.168.1.101 --shared-filesystem-domain cluster.lan"
+
+- name: setup htcondor submit
+  hosts: lx01
+  become: yes
+
+  tasks:
+    - name: setup htcondor ap
+      shell: "curl -fsSL https://get.htcondor.org | GET_HTCONDOR_PASSWORD=password /bin/bash -s -- --no-dry-run --submit 192.168.1.101 --shared-filesystem-domain cluster.lan"
+
+- name: setup htcondor execute
+  hosts: exec01
+  become: yes
+
+  tasks:
+    - name: setup htcondor ep
+      shell: "curl -fsSL https://get.htcondor.org | GET_HTCONDOR_PASSWORD=password /bin/bash -s -- --no-dry-run --execute 192.168.1.101 --shared-filesystem-domain cluster.lan"

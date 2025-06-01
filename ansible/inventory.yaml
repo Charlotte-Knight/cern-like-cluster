@@ -1,0 +1,20 @@
+all:
+  vars:
+    ansible_user: cloud-user
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+  hosts:
+    server:
+      ansible_host: 192.168.1.101
+    lx01:
+      ansible_host: 192.168.1.102
+    exec01:
+      ansible_host: 192.168.1.103
+
+  children:
+    clients:
+      hosts:
+        lx01:
+        exec01:
+  
+    
