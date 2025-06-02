@@ -17,6 +17,11 @@
           - "@Development Tools"
         state: present
 
+    - name: install epel repo
+      ansible.builtin.dnf:
+        name: epel-release
+        state: present
+
     - name: install more packages
       dnf:
         name: 
@@ -218,6 +223,258 @@
 
     - name: probe
       command: cvmfs_config probe
+
+- name: eos
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: install kerberos
+      dnf:
+        name: krb5-workstation
+        state: present
+
+    - name: change default_real to CERN.CH
+      ansible.builtin.lineinfile:
+        path: /etc/krb5.conf
+        regexp: '^\s*default_realm\s*='
+        line: '    default_realm = CERN.CH'
+        insertafter: '^\[libdefaults\]'
+        state: present
+
+    - name: add export KRB5CCNAME to /etc/bashrc
+      ansible.builtin.lineinfile:
+        path: /etc/bashrc
+        line: 'export KRB5CCNAME=/home/$(whoami)/.krb5cc'
+        state: present
+
+    - name: add eos repo
+      ansible.builtin.yum_repository:
+        name: eos
+        description: eos
+        baseurl: https://storage-ci.web.cern.ch/storage-ci/eos/diopside/tag/testing/el-$releasever/x86_64/
+        enabled: yes
+        gpgcheck: no
+
+    - name: add eos-deps repo
+      ansible.builtin.yum_repository:
+        name: eos-deps
+        description: eos-deps
+        baseurl: https://storage-ci.web.cern.ch/storage-ci/eos/diopside-depend/el-$releasever/x86_64/
+        enabled: yes
+        gpgcheck: no
+
+    - name: install cern-eos-autofs
+      dnf:
+        name: cern-eos-autofs
+        state: present
+
+    - name: enable and start autofs
+      service:
+        name: autofs
+        state: restarted
+        enabled: true
+
+# - name: eos
+#   hosts: all
+#   become: yes
+
+#   tasks:
+#     - name: add eos-tag repo
+#       ansible.builtin.yum_repository:
+#         name: eos-tag
+#         description: tagged EOS releases from EOS project
+#         baseurl: https://storage-ci.web.cern.ch/storage-ci/eos/diopside/tag/testing/el-$releasever/$basearch/
+#         enabled: yes
+#         gpgcheck: no
+#         priority: 10
+
+#     - name: add eos-depend repo
+#       ansible.builtin.yum_repository:
+#         name: eos-depend
+#         description: dependencies for EOS releases from EOS project
+#         baseurl: https://storage-ci.web.cern.ch/storage-ci/eos/diopside-depend/el-$releasever/$basearch/
+#         enabled: yes
+#         gpgcheck: no
+#         priority: 10
+
+#     - name: install eos-fusex, autofs, and kerberos
+#       dnf:
+#         name: 
+#           - eos-fusex
+#           - autofs
+#           - krb5-workstation
+#         state: present
+    
+#     - name: mkdir /eos
+#       ansible.builtin.file:
+#         path: /eos
+#         state: directory
+    
+#     - name: change browse_mode to yes
+#       ansible.builtin.lineinfile:
+#         path: /etc/autofs.conf
+#         regexp: '^browse_mode = '
+#         line: 'browse_mode = yes'
+
+#     - name: add /etc/auto.eos to /etc/auto.master
+#       ansible.builtin.lineinfile:
+#         path: /etc/auto.master
+#         line: '/eos /etc/auto.eos'
+
+#     - name: create /etc/auto.eos
+#       ansible.builtin.copy:
+#         dest: /etc/auto.eos
+#         content: |
+#           user      -fstype=eos                    :user
+#           project   -fstype=eos                    :project
+#           home-a    -fstype=eosx,fsname=home-a     :eosxd
+#           home-b    -fstype=eosx,fsname=home-b     :eosxd
+#           home-c    -fstype=eosx,fsname=home-c     :eosxd
+#           home-d    -fstype=eosx,fsname=home-d     :eosxd
+#           home-e    -fstype=eosx,fsname=home-e     :eosxd
+#           home-f    -fstype=eosx,fsname=home-f     :eosxd
+#           home-g    -fstype=eosx,fsname=home-g     :eosxd
+#           home-h    -fstype=eosx,fsname=home-h     :eosxd
+#           home-i    -fstype=eosx,fsname=home-i     :eosxd
+#           home-j    -fstype=eosx,fsname=home-j     :eosxd
+#           home-k    -fstype=eosx,fsname=home-k     :eosxd
+#           home-l    -fstype=eosx,fsname=home-l     :eosxd
+#           home-m    -fstype=eosx,fsname=home-m     :eosxd
+#           home-n    -fstype=eosx,fsname=home-n     :eosxd
+#           home-o    -fstype=eosx,fsname=home-o     :eosxd
+#           home-p    -fstype=eosx,fsname=home-p     :eosxd
+#           home-q    -fstype=eosx,fsname=home-q     :eosxd
+#           home-r    -fstype=eosx,fsname=home-r     :eosxd
+#           home-s    -fstype=eosx,fsname=home-s     :eosxd
+#           home-t    -fstype=eosx,fsname=home-t     :eosxd
+#           home-u    -fstype=eosx,fsname=home-u     :eosxd
+#           home-v    -fstype=eosx,fsname=home-v     :eosxd
+#           home-w    -fstype=eosx,fsname=home-w     :eosxd
+#           home-x    -fstype=eosx,fsname=home-x     :eosxd
+#           home-y    -fstype=eosx,fsname=home-y     :eosxd
+#           home-z    -fstype=eosx,fsname=home-z     :eosxd
+#           project-a -fstype=eosx,fsname=project-a  :eosxd
+#           project-b -fstype=eosx,fsname=project-b  :eosxd
+#           project-c -fstype=eosx,fsname=project-c  :eosxd
+#           project-d -fstype=eosx,fsname=project-d  :eosxd
+#           project-e -fstype=eosx,fsname=project-e  :eosxd
+#           project-f -fstype=eosx,fsname=project-f  :eosxd
+#           project-g -fstype=eosx,fsname=project-g  :eosxd
+#           project-h -fstype=eosx,fsname=project-h  :eosxd
+#           project-i -fstype=eosx,fsname=project-i  :eosxd
+#           project-j -fstype=eosx,fsname=project-j  :eosxd
+#           project-k -fstype=eosx,fsname=project-k  :eosxd
+#           project-l -fstype=eosx,fsname=project-l  :eosxd
+#           project-m -fstype=eosx,fsname=project-m  :eosxd
+#           project-n -fstype=eosx,fsname=project-n  :eosxd
+#           project-o -fstype=eosx,fsname=project-o  :eosxd
+#           project-p -fstype=eosx,fsname=project-p  :eosxd
+#           project-q -fstype=eosx,fsname=project-q  :eosxd
+#           project-r -fstype=eosx,fsname=project-r  :eosxd
+#           project-s -fstype=eosx,fsname=project-s  :eosxd
+#           project-t -fstype=eosx,fsname=project-t  :eosxd
+#           project-u -fstype=eosx,fsname=project-u  :eosxd
+#           project-v -fstype=eosx,fsname=project-v  :eosxd
+#           project-w -fstype=eosx,fsname=project-w  :eosxd
+#           project-x -fstype=eosx,fsname=project-x  :eosxd
+#           project-y -fstype=eosx,fsname=project-y  :eosxd
+#           project-z -fstype=eosx,fsname=project-z  :eosxd
+
+#     - name: create /etc/sysconfig/eos.user
+#       ansible.builtin.copy:
+#         dest: /etc/sysconfig/eos.user
+#         content: |
+#           export EOS_FUSE_CACHE_PAGE_SIZE=32768
+#           export EOS_FUSE_CACHE_SIZE=268435456
+#           export EOS_FUSE_DEBUG=0
+#           export EOS_FUSE_FILE_WB_CACHE_SIZE=1048576
+#           export EOS_FUSE_LAZYOPENRW=1
+#           export EOS_FUSE_LOGLEVEL=4
+#           export EOS_FUSE_MGM_ALIAS=eosuser-fuse.cern.ch
+#           export EOS_FUSE_MOUNTDIR=/eos/user/
+#           export EOS_FUSE_NEG_ENTRY_CACHE_TIME=1.0e-09
+#           export EOS_FUSE_NOPIO=1
+#           export EOS_FUSE_PIDMAP=1
+#           export EOS_FUSE_RDAHEAD=1
+#           export EOS_FUSE_RDAHEAD_WINDOW=262144
+#           export EOS_FUSE_RMLVL_PROTECT=2
+#           export EOS_FUSE_SHOW_SPECIAL_FILES=0
+#           export EOS_FUSE_SYNC=1
+#           export EOS_FUSE_USER_KRB5CC=1
+#           export EOS_LOG_SYSLOG=0
+#           export XRD_APPNAME=eos-fuse
+#           export XRD_CONNECTIONRETRY=4096
+#           export XRD_CONNECTIONWINDOW=10
+#           export XRD_DATASERVERTTL=300
+#           export XRD_LOADBALANCERTTL=1800
+#           export XRD_LOGLEVEL=Info
+#           export XRD_REDIRECTLIMIT=5
+#           export XRD_REQUESTTIMEOUT=60
+#           export XRD_STREAMERRORWINDOW=60
+#           export XRD_STREAMTIMEOUT=60
+#           export XRD_TIMEOUTRESOLUTION=1
+#           export XRD_WORKERTHREADS=16
+
+#     - name: create /etc/sysconfig/eos.project
+#       ansible.builtin.copy:
+#         dest: /etc/sysconfig/eos.project
+#         content: |
+#           export EOS_FUSE_CACHE_PAGE_SIZE=32768
+#           export EOS_FUSE_CACHE_SIZE=268435456
+#           export EOS_FUSE_DEBUG=0
+#           export EOS_FUSE_FILE_WB_CACHE_SIZE=1048576
+#           export EOS_FUSE_LAZYOPENRW=1
+#           export EOS_FUSE_LOGLEVEL=4
+#           export EOS_FUSE_MGM_ALIAS=eosproject-fuse.cern.ch
+#           export EOS_FUSE_MOUNTDIR=/eos/project/
+#           export EOS_FUSE_NEG_ENTRY_CACHE_TIME=1.0e-09
+#           export EOS_FUSE_NOPIO=1
+#           export EOS_FUSE_PIDMAP=1
+#           export EOS_FUSE_RDAHEAD=1
+#           export EOS_FUSE_RDAHEAD_WINDOW=262144
+#           export EOS_FUSE_RMLVL_PROTECT=1
+#           export EOS_FUSE_SHOW_SPECIAL_FILES=0
+#           export EOS_FUSE_SYNC=1
+#           export EOS_FUSE_USER_KRB5CC=1
+#           export EOS_LOG_SYSLOG=0
+#           export XRD_APPNAME=eos-fuse
+#           export XRD_CONNECTIONRETRY=4096
+#           export XRD_CONNECTIONWINDOW=10
+#           export XRD_DATASERVERTTL=300
+#           export XRD_LOADBALANCERTTL=1800
+#           export XRD_LOGLEVEL=Info
+#           export XRD_REDIRECTLIMIT=5
+#           export XRD_REQUESTTIMEOUT=60
+#           export XRD_STREAMERRORWINDOW=60
+#           export XRD_STREAMTIMEOUT=60
+#           export XRD_TIMEOUTRESOLUTION=1
+#           export XRD_WORKERTHREADS=16
+
+#     - name: mkdir /etc/eos
+#       ansible.builtin.file:
+#         path: /etc/eos
+#         state: directory
+
+#     - name: Create /etc/eos/fuse.home-<initial>.conf for each letter
+#       ansible.builtin.copy:
+#         dest: "/etc/eos/fuse.home-{{ item }}.conf"
+#         content: |
+#           {"name":"home-{{ item }}","hostport":"eoshome-{{ item }}.cern.ch","remotemountdir":"/eos/user/{{ item }}/", "auth": {"shared-mount": true}}
+#       loop: "{{ 'abcdefghijklmnopqrstuvwxyz' | list }}"
+
+#     - name: Create /etc/eos/fuse.project-<initial>.conf for each letter
+#       ansible.builtin.copy:
+#         dest: "/etc/eos/fuse.project-{{ item }}.conf"
+#         content: |
+#           {"name":"project-{{ item }}","hostport":"eosproject-{{ item }}.cern.ch", "remotemountdir":"/eos/project/{{ item }}/", "auth": {"shared-mount": true}}
+#       loop: "{{ 'abcdefghijklmnopqrstuvwxyz' | list }}"
+
+#     - name: restart autofs
+#       service:
+#         name: autofs
+#         state: restarted
+#         enabled: true
 
 - name: setup htcondor central manager
   hosts: server
